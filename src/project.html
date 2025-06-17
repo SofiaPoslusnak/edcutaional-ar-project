@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Молекулярний конструктор</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+      }
+      #menu {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 1000;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 10px;
+        border-radius: 5px;
+      }
+      #menu button, #menu input {
+        margin: 5px;
+        padding: 8px;
+        font-size: 16px;
+        cursor: pointer;
+      }
+      #menu input {
+        width: 40px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Меню для вибору молекул та зміни валентностей -->
+    <div id="menu">
+      <button onclick="loadMolecule('water')">Вода (H₂O)</button>
+      <button onclick="loadMolecule('methane')">Метан (CH₄)</button>
+      <button onclick="loadMolecule('butane')">Бутан (C₄H₁₀)</button>
+      <br>
+      <label>Valence C: <input type="number" id="valenceC" value="4" min="1" max="4"></label>
+      <label>Valence H: <input type="number" id="valenceH" value="1" min="1" max="1"></label>
+      <label>Valence O: <input type="number" id="valenceO" value="2" min="1" max="2"></label>
+    </div>
+
+    <!-- A-Frame сцена -->
+    <a-scene>
+      <!-- Освітлення -->
+      <a-light type="ambient" color="#ffffff" intensity="0.5"></a-light>
+      <a-light type="directional" color="#ffffff" intensity="0.7" position="2 4 4"></a-light>
+
+      <!-- Контейнер для молекул -->
+      <a-entity id="molecule"></a-entity>
+
+      <!-- Камера з можливістю обертання -->
+      <a-camera position="0 1.6 4" look-controls></a-camera>
+    </a-scene>
+
+    <script>
+      // Зберігання міток валентності, атомів і їхніх позицій для оновлення
+      let valenceLabels = [];
+      let atoms = [];
+      let hydrogenAtoms = []; // Поточні водні атоми
+      let initialHydrogenPositions = { // Початкові позиції воднів
+        methane: [
+          [0.4, 1.9, 0.4], [0.4, 1.9, -0.4], [-0.4, 1.9, 0.4], [-0.4, 1.9, -0.4]
+        ],
+        butane: [
+          [0, 1.9, 0.4], [0, 1.9, -0.4], [0, 1.1, 0], [0.6, 1.9, 0.4], [0.6, 1.9, -0.4],
+          [1.2, 1.9, 0.4], [1.2, 1.9, -0.4], [1.8, 1.9, 0.4], [1.8, 1.9, -0.4], [1.8, 1.1, 0]
+        ],
+        water: [
+          [0.4, 1.9, 0], [-0.4, 1.9, 0]
+        ]
+      };
+      let previousValenceC = 4; // Зберігаємо попередню валентність вуглецю
+      let previousValenceO = 2; // Зберігаємо попередню валентність кисню
+
+      // Функція для очищення сцени
+      function clearMolecule() {
+        const molecule = document.querySelector('#molecule');
+        while (molecule.firstChild) {
+          molecule.removeChild(molecule.firstChild);
+        }
+        valenceLabels = [];
+        atoms = [];
+        hydrogenAtoms = [];
+      }
+
+      // Функція для створення атома
+      function createAtom(type, position, radius, color) {
+        const atom = document.createElement('a-sphere');
+        atom.setAttribute('position', position.join(' '));
+        atom.setAttribute('radius', radius);
+        atom.setAttribute('color', color);
+        atom.setAttribute('class', type);
+        atoms.push({ element: atom, type: type, position: position });
+        if (type === 'H') hydrogenAtoms.push(atom);
+        return atom;
+      }
+
+      // Функція для створення мітки валентності
+      function createValenceLabel(position, valence) {
+        const label = document.createElement('a-text');
+        label.setAttribute('value', valence);
+        label.setAttribute('position', position.join(' '));
+        label.setAttribute('align', 'center');
+        label.setAttribute('color', '#ffffff');
+        label.setAttribute('scale', '0.5 0.5 0.5');
+        valenceLabels.push(label);
+        return label;
+      }
+
+      // Функція для створення маркерів потенційних зв’язків
+      function createBondMarker(position, angle, distance) {
+        const marker = document.createElement('a-sphere');
+        const x = position[0] + distance * Math.sin(angle);
+        const y = position[1] + distance * Math.cos(angle);
+        const z = position[2];
+        marker.setAttribute('position', `${x} ${y} ${z}`);
+        marker.setAttribute('radius', 0.05);
+        marker.setAttribute('color', '#00ff00');
+        marker.setAttribute('opacity', 0.5);
+        return marker;
+      }
+
+      // Функція для відновлення воднів
+      function restoreHydrogens(molecule, type, valence) {
+        let expectedHydrogens;
+        if (type === 'water' && molecule.querySelectorAll('a-sphere[class="O"]').length === 1) {
+          expectedHydrogens = { 2: 2, 1: 1 }[valence] || 0;
+        } else if (type === 'butane' && molecule.querySelectorAll('a-sphere[class="C"]').length === 4) {
+          expectedHydrogens = { 4: 10, 3: 9, 2: 8, 1: 7 }[valence] || 0;
+        } else if (type === 'methane' && molecule.querySelectorAll('a-sphere[class="C"]').length === 1) {
+          expectedHydrogens = { 4: 4, 3: 3, 2: 2, 1: 1 }[valence] || 0;
+        }
+        if (expectedHydrogens && hydrogenAtoms.length < expectedHydrogens) {
+          const positionsToRestore = initialHydrogenPositions[type].slice(hydrogenAtoms.length, expectedHydrogens);
+          positionsToRestore.forEach(pos => {
+            const hAtom = createAtom('H', pos, 0.15, '#ffffff');
+            molecule.appendChild(hAtom);
+            molecule.appendChild(createValenceLabel([pos[0], pos[1] + 0.4, pos[2]], document.getElementById('valenceH').value));
+          });
+        }
+      }
+
+      // Функція для оновлення зовнішнього вигляду та перевірки зв’язків
+      function updateAppearance() {
+        const valenceC = Math.min(parseInt(document.getElementById('valenceC').value), 4);
+        const valenceH = Math.min(parseInt(document.getElementById('valenceH').value), 1);
+        const valenceO = Math.min(parseInt(document.getElementById('valenceO').value), 2);
+        const molecule = document.querySelector('#molecule');
+
+        // Оновлюємо поля введення, якщо введено більше максимуму
+        document.getElementById('valenceC').value = valenceC;
+        document.getElementById('valenceH').value = valenceH;
+        document.getElementById('valenceO').value = valenceO;
+
+        // Видаляємо старі маркери зв’язків
+        const oldMarkers = molecule.querySelectorAll('.bond-marker');
+        oldMarkers.forEach(marker => marker.remove());
+
+        atoms.forEach(atomObj => {
+          const { element, type, position } = atomObj;
+          let valence = 0;
+          if (type === 'C') valence = valenceC;
+          else if (type === 'H') valence = valenceH;
+          else if (type === 'O') valence = valenceO;
+
+          // Зміна розміру сфери
+          const baseRadius = (type === 'H') ? 0.15 : 0.3;
+          const scaleFactor = 0.5 + (valence / 10);
+          element.setAttribute('radius', baseRadius * scaleFactor);
+
+          // Оновлення міток валентності
+          valenceLabels.forEach(label => {
+            const labelPosStr = label.getAttribute('position');
+            if (labelPosStr && typeof labelPosStr === 'string') {
+              const labelPos = labelPosStr.split(' ').map(Number);
+              if (labelPos && labelPos.length === 3 && labelPos[0] === position[0] && labelPos[1] === position[1] + 0.4 && labelPos[2] === position[2]) {
+                label.setAttribute('value', valence);
+              }
+            }
+          });
+
+          // Додавання нових маркерів зв’язків
+          if (valence > 0) {
+            const angleStep = (2 * Math.PI) / valence;
+            for (let i = 0; i < valence; i++) {
+              const marker = createBondMarker(position, i * angleStep, 0.3);
+              marker.setAttribute('class', 'bond-marker');
+              molecule.appendChild(marker);
+            }
+          }
+        });
+
+        // Перевірка та керування воднями
+        const oxygenCount = molecule.querySelectorAll('a-spene[class="O"]').length;
+        const carbonCount = molecule.querySelectorAll('a-sphere[class="C"]').length;
+        const moleculeType = oxygenCount === 1 ? 'water' : carbonCount === 4 ? 'butane' : carbonCount === 1 ? 'methane' : null;
+        if (moleculeType) {
+          let expectedHydrogens;
+          if (moleculeType === 'water') {
+            expectedHydrogens = { 2: 2, 1: 1 }[valenceO] || 0;
+            if (valenceO > previousValenceO && hydrogenAtoms.length < expectedHydrogens) {
+              restoreHydrogens(molecule, moleculeType, valenceO);
+            } else if (valenceO < previousValenceO && hydrogenAtoms.length > expectedHydrogens) {
+              while (hydrogenAtoms.length > expectedHydrogens) {
+                const hydrogenToRemove = hydrogenAtoms.pop();
+                if (hydrogenToRemove.parentNode) {
+                  hydrogenToRemove.parentNode.removeChild(hydrogenToRemove);
+                }
+                valenceLabels = valenceLabels.filter(label => {
+                  const labelPosStr = label.getAttribute('position');
+                  if (labelPosStr && typeof labelPosStr === 'string') {
+                    const labelPos = labelPosStr.split(' ').map(Number);
+                    return !atoms.some(atom => atom.position[0] === labelPos[0] && atom.position[1] === labelPos[1] - 0.4 && atom.position[2] === labelPos[2] && atom.type === 'H' && atom.element === hydrogenToRemove);
+                  }
+                  return true;
+                });
+              }
+            }
+            previousValenceO = valenceO; // Оновлюємо попередню валентність кисню
+          } else if (moleculeType === 'butane' || moleculeType === 'methane') {
+            expectedHydrogens = { 4: carbonCount * 4 - (carbonCount - 1) * 2, 3: carbonCount * 3 - (carbonCount - 1) * 2, 2: carbonCount * 2 - (carbonCount - 1) * 2, 1: carbonCount * 1 - (carbonCount - 1) * 2 }[valenceC] || 0;
+            if (valenceC > previousValenceC && hydrogenAtoms.length < expectedHydrogens) {
+              restoreHydrogens(molecule, moleculeType, valenceC);
+            } else if (valenceC < previousValenceC && hydrogenAtoms.length > expectedHydrogens) {
+              while (hydrogenAtoms.length > expectedHydrogens) {
+                const hydrogenToRemove = hydrogenAtoms.pop();
+                if (hydrogenToRemove.parentNode) {
+                  hydrogenToRemove.parentNode.removeChild(hydrogenToRemove);
+                }
+                valenceLabels = valenceLabels.filter(label => {
+                  const labelPosStr = label.getAttribute('position');
+                  if (labelPosStr && typeof labelPosStr === 'string') {
+                    const labelPos = labelPosStr.split(' ').map(Number);
+                    return !atoms.some(atom => atom.position[0] === labelPos[0] && atom.position[1] === labelPos[1] - 0.4 && atom.position[2] === labelPos[2] && atom.type === 'H' && atom.element === hydrogenToRemove);
+                  }
+                  return true;
+                });
+              }
+            }
+            previousValenceC = valenceC; // Оновлюємо попередню валентність вуглецю
+          }
+        }
+      }
+
+      // Додаємо слухача подій для оновлення зовнішнього вигляду
+      document.getElementById('valenceC').addEventListener('change', updateAppearance);
+      document.getElementById('valenceH').addEventListener('change', updateAppearance);
+      document.getElementById('valenceO').addEventListener('change', updateAppearance);
+
+      // Функція для завантаження молекули
+      function loadMolecule(type) {
+        clearMolecule();
+        const molecule = document.querySelector('#molecule');
+
+        if (type === 'water') {
+          const bondLengthOH = 0.4;
+          const angleHOH = 104.5 * Math.PI / 180;
+          const alpha = angleHOH / 2;
+          const hX = bondLengthOH * Math.sin(alpha);
+          const hY = bondLengthOH * Math.cos(alpha);
+          const oPos = [0, 1.5, 0];
+          const h1Pos = [hX, 1.5 + hY, 0];
+          const h2Pos = [-hX, 1.5 + hY, 0];
+          molecule.appendChild(createAtom('O', oPos, 0.3, '#ff0000'));
+          molecule.appendChild(createAtom('H', h1Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h2Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createValenceLabel([oPos[0], oPos[1] + 0.4, oPos[2]], document.getElementById('valenceO').value));
+          molecule.appendChild(createValenceLabel([h1Pos[0], h1Pos[1] + 0.4, h1Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h2Pos[0], h2Pos[1] + 0.4, h2Pos[2]], document.getElementById('valenceH').value));
+        } else if (type === 'methane') {
+          const r = 0.4;
+          const s = r / Math.sqrt(3);
+          const cPos = [0, 1.5, 0];
+          const h1Pos = [s, 1.5 + s, s];
+          const h2Pos = [s, 1.5 - s, -s];
+          const h3Pos = [-s, 1.5 + s, -s];
+          const h4Pos = [-s, 1.5 - s, s];
+          molecule.appendChild(createAtom('C', cPos, 0.3, '#333333'));
+          molecule.appendChild(createAtom('H', h1Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h2Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h3Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h4Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createValenceLabel([cPos[0], cPos[1] + 0.4, cPos[2]], document.getElementById('valenceC').value));
+          molecule.appendChild(createValenceLabel([h1Pos[0], h1Pos[1] + 0.4, h1Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h2Pos[0], h2Pos[1] + 0.4, h2Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h3Pos[0], h3Pos[1] + 0.4, h3Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h4Pos[0], h4Pos[1] + 0.4, h4Pos[2]], document.getElementById('valenceH').value));
+        } else if (type === 'butane') {
+          const d = 0.6;
+          const h = 0.4;
+          const angle = 109.5 * Math.PI / 180;
+          const hOffset = h * Math.cos(angle / 2);
+          const hSide = h * Math.sin(angle / 2);
+          const c1Pos = [0, 1.5, 0];
+          const c2Pos = [d, 1.5, 0];
+          const c3Pos = [2 * d, 1.5, 0];
+          const c4Pos = [3 * d, 1.5, 0];
+          const h1Pos = [c1Pos[0], c1Pos[1] + hOffset, hSide];
+          const h2Pos = [c1Pos[0], c1Pos[1] + hOffset, -hSide];
+          const h3Pos = [c1Pos[0], c1Pos[1] - h, 0];
+          const h4Pos = [c2Pos[0], c2Pos[1] + hOffset, hSide];
+          const h5Pos = [c2Pos[0], c2Pos[1] + hOffset, -hSide];
+          const h6Pos = [c3Pos[0], c3Pos[1] + hOffset, hSide];
+          const h7Pos = [c3Pos[0], c3Pos[1] + hOffset, -hSide];
+          const h8Pos = [c4Pos[0], c4Pos[1] + hOffset, hSide];
+          const h9Pos = [c4Pos[0], c4Pos[1] + hOffset, -hSide];
+          const h10Pos = [c4Pos[0], c4Pos[1] - h, 0];
+          molecule.appendChild(createAtom('C', c1Pos, 0.3, '#333333'));
+          molecule.appendChild(createAtom('C', c2Pos, 0.3, '#333333'));
+          molecule.appendChild(createAtom('C', c3Pos, 0.3, '#333333'));
+          molecule.appendChild(createAtom('C', c4Pos, 0.3, '#333333'));
+          molecule.appendChild(createAtom('H', h1Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h2Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h3Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h4Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h5Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h6Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h7Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h8Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h9Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createAtom('H', h10Pos, 0.15, '#ffffff'));
+          molecule.appendChild(createValenceLabel([c1Pos[0], c1Pos[1] + 0.4, c1Pos[2]], document.getElementById('valenceC').value));
+          molecule.appendChild(createValenceLabel([c2Pos[0], c2Pos[1] + 0.4, c2Pos[2]], document.getElementById('valenceC').value));
+          molecule.appendChild(createValenceLabel([c3Pos[0], c3Pos[1] + 0.4, c3Pos[2]], document.getElementById('valenceC').value));
+          molecule.appendChild(createValenceLabel([c4Pos[0], c4Pos[1] + 0.4, c4Pos[2]], document.getElementById('valenceC').value));
+          molecule.appendChild(createValenceLabel([h1Pos[0], h1Pos[1] + 0.4, h1Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h2Pos[0], h2Pos[1] + 0.4, h2Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h3Pos[0], h3Pos[1] + 0.4, h3Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h4Pos[0], h4Pos[1] + 0.4, h4Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h5Pos[0], h5Pos[1] + 0.4, h5Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h6Pos[0], h6Pos[1] + 0.4, h6Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h7Pos[0], h7Pos[1] + 0.4, h7Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h8Pos[0], h8Pos[1] + 0.4, h8Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h9Pos[0], h9Pos[1] + 0.4, h9Pos[2]], document.getElementById('valenceH').value));
+          molecule.appendChild(createValenceLabel([h10Pos[0], h10Pos[1] + 0.4, h10Pos[2]], document.getElementById('valenceH').value));
+        }
+        updateAppearance(); // Оновлюємо зовнішній вигляд при завантаженні
+      }
+
+      // Завантажуємо воду за замовчуванням
+      loadMolecule('water');
+    </script>
+  </body>
+</html>
