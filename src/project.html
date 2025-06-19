@@ -33,8 +33,8 @@
       <button onclick="loadMolecule('butane')">Бутан (C₄H₁₀)</button>
     </div>
 
-    <!-- A-Frame сцена -->
-    <a-scene>
+    <!-- A-Frame сцена з ніжним блакитним фоном -->
+    <a-scene background="color: #E6F0FA">
       <!-- Освітлення -->
       <a-light type="ambient" color="#ffffff" intensity="0.5"></a-light>
       <a-light type="directional" color="#ffffff" intensity="0.7" position="2 4 4"></a-light>
@@ -47,6 +47,8 @@
     </a-scene>
 
     <script>
+      let menuState = 'main'; // Стан меню: 'main' або 'butane'
+
       // Функція для очищення сцени
       function clearMolecule() {
         const molecule = document.querySelector('#molecule');
@@ -64,6 +66,26 @@
         return atom;
       }
 
+      // Функція для оновлення меню
+      function updateMenu(state) {
+        const menu = document.querySelector('#menu');
+        menu.innerHTML = '';
+        if (state === 'main') {
+          menuState = 'main';
+          menu.innerHTML = `
+            <button onclick="loadMolecule('water')">Вода (H₂O)</button>
+            <button onclick="loadMolecule('methane')">Метан (CH₄)</button>
+            <button onclick="loadMolecule('butane')">Бутан (C₄H₁₀)</button>
+          `;
+        } else if (state === 'butane') {
+          menuState = 'butane';
+          menu.innerHTML = `
+            <button onclick="updateMenu('main')">Назад</button>
+            <button onclick="loadMolecule('isobutane')">Ізобутан (C₄H₁₀)</button>
+          `;
+        }
+      }
+
       // Функція для завантаження молекули
       function loadMolecule(type) {
         clearMolecule();
@@ -71,7 +93,7 @@
 
         if (type === 'water') {
           // Вода: 1 O, 2 H, кут H-O-H ~104.5°
-          const bondLengthOH = 0.4; // Масштабована довжина O-H
+          const bondLengthOH = 0.4;
           const angleHOH = 104.5 * Math.PI / 180;
           const alpha = angleHOH / 2;
           const hX = bondLengthOH * Math.sin(alpha);
@@ -81,7 +103,7 @@
           molecule.appendChild(createAtom('H', `${-hX} ${1.5 + hY} 0`, 0.15, '#ffffff'));
         } else if (type === 'methane') {
           // Метан: 1 C, 4 H, тетраедральна геометрія, кут ~109.5°
-          const r = 0.4; // Масштабована довжина C-H
+          const r = 0.4;
           const s = r / Math.sqrt(3);
           molecule.appendChild(createAtom('C', '0 1.5 0', 0.3, '#333333'));
           molecule.appendChild(createAtom('H', `${s} ${1.5 + s} ${s}`, 0.15, '#ffffff'));
@@ -90,32 +112,59 @@
           molecule.appendChild(createAtom('H', `${-s} ${1.5 - s} ${s}`, 0.15, '#ffffff'));
         } else if (type === 'butane') {
           // Бутан: 4 C, 10 H, горизонтальна лінія для вуглецю, кут 109.5°
-          const d = 0.6; // Масштабована довжина C-C, щоб сфери торкалися (2 * 0.3)
-          const h = 0.4; // Масштабована довжина C-H
+          const d = 0.6;
+          const h = 0.4;
           const angle = 109.5 * Math.PI / 180;
-          const hOffset = h * Math.cos(angle / 2); // Висота для водню в тетраедрі
-          const hSide = h * Math.sin(angle / 2); // Боковий зсув для водню
-          // Атоми вуглецю в горизонтальній лінії
+          const hOffset = h * Math.cos(angle / 2);
+          const hSide = h * Math.sin(angle / 2);
           molecule.appendChild(createAtom('C', `0 1.5 0`, 0.3, '#333333')); // C1
           molecule.appendChild(createAtom('C', `${d} 1.5 0`, 0.3, '#333333')); // C2
           molecule.appendChild(createAtom('C', `${2 * d} 1.5 0`, 0.3, '#333333')); // C3
-
           molecule.appendChild(createAtom('C', `${3 * d} 1.5 0`, 0.3, '#333333')); // C4
-          // Атоми водню
-          // Для C1 (3 H)
           molecule.appendChild(createAtom('H', `0 ${1.5 + hOffset} ${hSide}`, 0.15, '#ffffff')); // H1
           molecule.appendChild(createAtom('H', `0 ${1.5 + hOffset} ${-hSide}`, 0.15, '#ffffff')); // H2
           molecule.appendChild(createAtom('H', `0 ${1.5 - h} 0`, 0.15, '#ffffff')); // H3
-          // Для C2 (2 H)
           molecule.appendChild(createAtom('H', `${d} ${1.5 + hOffset} ${hSide}`, 0.15, '#ffffff')); // H4
           molecule.appendChild(createAtom('H', `${d} ${1.5 + hOffset} ${-hSide}`, 0.15, '#ffffff')); // H5
-          // Для C3 (2 H)
           molecule.appendChild(createAtom('H', `${2 * d} ${1.5 + hOffset} ${hSide}`, 0.15, '#ffffff')); // H6
           molecule.appendChild(createAtom('H', `${2 * d} ${1.5 + hOffset} ${-hSide}`, 0.15, '#ffffff')); // H7
-          // Для C4 (3 H)
           molecule.appendChild(createAtom('H', `${3 * d} ${1.5 + hOffset} ${hSide}`, 0.15, '#ffffff')); // H8
           molecule.appendChild(createAtom('H', `${3 * d} ${1.5 + hOffset} ${-hSide}`, 0.15, '#ffffff')); // H9
           molecule.appendChild(createAtom('H', `${3 * d} ${1.5 - h} 0`, 0.15, '#ffffff')); // H10
+          updateMenu('butane'); // Перемикаємо на підменю бутану
+        } else if (type === 'isobutane' && menuState === 'butane') {
+          // Ізобутан: 4 C, 10 H, центральний C з трьома CH₃ групами
+          const d = 0.6; // Довжина зв’язку C-C
+          const h = 0.4; // Довжина C-H
+          const angle = 109.5 * Math.PI / 180;
+          const hOffset = h * Math.cos(angle / 2); // Висота для водню в тетраедрі
+          const hSide = h * Math.sin(angle / 2); // Боковий зсув для водню
+          const angleStep = (2 * Math.PI) / 3; // Кут між трьома метильними групами
+          // Центральний вуглець
+          molecule.appendChild(createAtom('C', '0 1.5 0', 0.3, '#333333')); // C1
+          // Три метильні групи (C2, C3, C4)
+          molecule.appendChild(createAtom('C', `${d} 1.5 0`, 0.3, '#333333')); // C2
+          molecule.appendChild(createAtom('C', `${d * Math.cos(angleStep)} ${1.5 + d * Math.sin(angleStep)} 0`, 0.3, '#333333')); // C3
+          molecule.appendChild(createAtom('C', `${d * Math.cos(2 * angleStep)} ${1.5 + d * Math.sin(2 * angleStep)} 0`, 0.3, '#333333')); // C4
+          // Водні для C2 (3 H) ближче до C з невеликим розворотом
+          molecule.appendChild(createAtom('H', `${d} ${1.5 + hOffset - 0.05} ${hSide + 0.05}`, 0.15, '#ffffff')); // H1
+          molecule.appendChild(createAtom('H', `${d} ${1.5 + hOffset + 0.05} ${-hSide - 0.05}`, 0.15, '#ffffff')); // H2
+          molecule.appendChild(createAtom('H', `${d - 0.05} ${1.5 - h + 0.05} 0`, 0.15, '#ffffff')); // H3
+          // Водні для C3 (3 H) ближче до C з розворотом
+          molecule.appendChild(createAtom('H', `${d * Math.cos(angleStep)} ${1.5 + d * Math.sin(angleStep) + hOffset - 0.05} ${hSide + 0.05}`, 0.15, '#ffffff')); // H4
+          molecule.appendChild(createAtom('H', `${d * Math.cos(angleStep) + 0.05} ${1.5 + d * Math.sin(angleStep) + hOffset + 0.05} ${-hSide - 0.05}`, 0.15, '#ffffff')); // H5
+          molecule.appendChild(createAtom('H', `${d * Math.cos(angleStep) - 0.05} ${1.5 + d * Math.sin(angleStep) - h + 0.05} 0`, 0.15, '#ffffff')); // H6
+          // Водні для C4 (3 H) ближче до C з розворотом
+          molecule.appendChild(createAtom('H', `${d * Math.cos(2 * angleStep)} ${1.5 + d * Math.sin(2 * angleStep) + hOffset - 0.05} ${hSide + 0.05}`, 0.15, '#ffffff')); // H7
+          molecule.appendChild(createAtom('H', `${d * Math.cos(2 * angleStep) - 0.05} ${1.5 + d * Math.sin(2 * angleStep) + hOffset + 0.05} ${-hSide - 0.05}`, 0.15, '#ffffff')); // H8
+          molecule.appendChild(createAtom('H', `${d * Math.cos(2 * angleStep) + 0.05} ${1.5 + d * Math.sin(2 * angleStep) - h + 0.05} 0`, 0.15, '#ffffff')); // H9
+          // Один водень для центрального C (H10) переміщено ближче до C1, торкається лише його
+          const hDistance = 0.45; // Сума радіусів C (0.3) і H (0.15)
+          const hAngle = Math.PI / 2; // Напрямок, протилежний до інших C, для уникнення перекриття
+          const hX = hDistance * Math.cos(hAngle);
+          const hY = 1.5 + hDistance * Math.sin(hAngle);
+          const hZ = 0; // Залишаємо в тій самій площині для простоти
+          molecule.appendChild(createAtom('H', `${hX} ${hY} ${hZ}`, 0.15, '#ffffff')); // H10, торкається лише C1
         }
       }
 
